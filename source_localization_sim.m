@@ -66,7 +66,8 @@ for k = 1 : size(source_pos_all, 1)
             y = sin(2 * pi * freq_sound * max(t - i/fs, 0));  %% mimic the ADC sampling, switch into different channel after one step
             real_signal = [zeros(1, num_samples_delay) y(1:N-num_samples_delay)] + noise; 
             sampled_signal = (2/num_levels) *  round( (num_levels/2) * real_signal ) ;
-            rec_signal(:, i) = sampled_signal;
+           % rec_signal(:, i) = sampled_signal;
+            rec_signal(:, i) = audio_signal(:, 1);
              %rec_signal(:, i)= audio_signal(1:N, i);
         end
 
