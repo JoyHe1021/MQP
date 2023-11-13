@@ -13,7 +13,7 @@ num_rec = size(rec_pos_all, 1);
 
 % Read audio signal from a WAV file (Assuming a stereo audio with 2 channels)
 [audio_signal, fs] = audioread('0426 YJ ROOFTOP Mastered.wav');
-audio_signal = audio_signal(:, 1); % Use only the left channel
+% audio_signal = audio_signal(:, 1); % Use only the left channel
 
 %% Signal parameters
 fs = 1 * 1e6;  %% Sampling rate for ADC: this will affect the final prediction performance!!
@@ -53,16 +53,23 @@ for k = 1 : size(source_pos_all, 1)
         rec_signal = [];
         noise = wgn(1, N, noise_db);
         
-        for i = 1 : num_rec
+       for i = 1 : num_rec
             rec_pos = rec_pos_all(i,:);
             dis = sqrt(sum((rec_pos - source_pos).^2));
-            time_delay = dis / sound_speed;
+            time_delay = dis/sound_speed;
             num_samples_delay = ceil(time_delay * fs);
-            y = sin(2 * pi * freq_sound * max(t - i/fs, 0));  %% Mimic the ADC sampling, switch into different channel after one step
-            real_signal = [zeros(1, num_samples_delay) y(1:N - num_samples_delay)] + noise; 
+            time_delay_all(i) = time_delay;
+%             rec_signal(:, i) = sin(2 * pi * freq_sound * max(t - time_delay, 0)) + noise;
+%             rec_signal(:, i) = audio_signal+noise;
+            y = sin(2 * pi * freq_sound * max(t - i/fs, 0));  %% mimic the ADC sampling, switch into different channel after one step
+            real_signal = [zeros(1, num_samples_delay) y(1:N-num_samples_delay)] + noise; 
             sampled_signal = (2/num_levels) *  round( (num_levels/2) * real_signal ) ;
-            rec_signal(:, i) = sampled_signal;
+%              rec_signal(:, i) = sampled_signal;
+              rec_signal(:, i) = [zeros(num_samples_delay, 1); audio_signal(1:10000-num_samples_delay, 1)];
+%             1
         end
+
+
     
         %% Compute the lagged correlation between different receivers
         features = [];
@@ -114,7 +121,10 @@ disp(['Decision Tree Test Accuracy: ', num2str(test_acc_dt)]);
 
 %  confusion matrix
 confusion_matrix = confusionmat(testClass, prediction_dt);
-disp('Confusion Matrix:');
-disp(confusion_matrix);
+%disp('Confusion Matrix:');
+%disp(confusion_matrix);
+
+
+
 
 
