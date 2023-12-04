@@ -1,0 +1,112 @@
+import numpy as np
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix
+
+sound_speed = 340
+
+# Positions of receivers in robot, x, y, z, in meter
+rec_pos1 = np.array([0.05, 0, 1.6])
+rec_pos2 = np.array([-0.05, 0, 1.6])
+rec_pos3 = np.array([0, 0, 1.58])
+rec_pos_all = np.array([rec_pos1, rec_pos2, rec_pos3])
+
+# WAV file
+audio_signal, fs = librosa.load('0426 YJ ROOFTOP Mastered.wav', sr=None)
+
+# Signal parameters
+fs = 1 * 1e6
+t = np.arange(0, 0.1, 1/fs)
+freq_sound = 400
+noise_db = -30
+N = len(t)
+
+# ADC
+num_bits = 16
+num_levels = 2 ** num_bits - 1
+
+# Positions of speaker
+source_pos_base = np.array([0, 2, 1.7])
+source_pos_all = []
+
+for x in np.arange(-1, 1.1, 0.5):
+    for y in np.arange(-1, 1.1, 0.5):
+        for z in np.arange(-0.5, 0.6, 0.5):
+            source_pos_all.append(source_pos_base + np.array([x, y, z]))
+
+source_pos_all = np.array(source_pos_all)
+
+# For each source position, generate 10 groups of features: time delay between receivers
+num_trials = 10
+Data = []
+Class = []
+num_samples = 0
+
+for k in range(source_pos_all.shape[0]):
+    source_pos = source_pos_all[k, :]
+
+    for _ in range(num_trials):
+        # Received signal at each receiver
+        rec_signal = []
+        noise = np.random.normal(0, 10 ** (noise_db / 20), N)
+
+        for i in range(rec_pos_all.shape[0]):
+            rec_pos = rec_pos_all[i, :]
+            dis = np.sqrt(np.sum((rec_pos - source_pos) ** 2))
+            time_delay = dis / sound_speed
+            num_samples_delay = int(time_delay * fs)
+            time_delay_all = time_delay
+
+            y = np.sin(2 * np.pi * freq_sound * np.maximum(t - i/fs, 0))
+            real_signal = np.concatenate([np.zeros(num_samples_delay), y[:N - num_samples_delay]]) + noise
+            sampled_signal = (2 / num_levels) * np.round((num_levels / 2) * real_signal)
+            rec_signal.append(sampled_signal)
+
+        rec_signal = np.array(rec_signal)
+
+        # Compute the lagged correlation between different receivers
+        features = []
+        count = 0
+
+        for i in range(rec_signal.shape[0]):
+            for j in range(i + 1, rec_signal.shape[0]):
+                c = np.correlate(rec_signal[i, :], rec_signal[j, :], mode='full')
+                max_ind = np.argmax(c)
+                lag = max_ind - len(c) // 2
+                features.append(lag)
+                count += 1
+
+        Data.append(features)
+        Class.append(k)
+        num_samples += 1
+
+# Split the data into two parts: training data to train the ML model, and the test data to evaluate the model performance
+class_all = np.unique(Class)
+num_class = len(class_all)
+train_per = 0.8
+
+trainData, trainClass, testData, testClass = [], [], [], []
+
+for i in range(num_class):
+    c = np.where(np.array(Class) == class_all[i])[0]
+    num_data = len(c)
+    random_index = np.random.permutation(num_data)
+    num_training = int(np.ceil(num_data * train_per))
+    idx_training = c[random_index[:num_training]]
+    idx_testing = c[random_index[num_training:]]
+
+    trainData.extend(Data[idx_training])
+    trainClass.extend(Class[idx_training])
+
+    testData.extend(Data[idx_testing])
+    testClass.extend(Class[idx_testing])
+
+trainData, trainClass, testData, testClass = np.array(trainData), np.array(trainClass), np.array(testData), np.array(testClass)
+
+# Train a classifier
+knn_classifier = KNeighborsClassifier(n_neighbors=5)
+knn_classifier.fit(trainData, trainClass)
+prediction = knn_classifier.predict(testData)
+test_acc = accuracy_score(testClass, prediction)
+
+# Get the confusion matrix
+conf_matrix = confusion_matrix(testClass, prediction)
